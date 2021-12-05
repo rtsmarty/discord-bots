@@ -18,7 +18,7 @@ use std::{
 use structopt::StructOpt;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
-const MAX_MESSAGE_LENGTH: usize = 2048;
+const MAX_MESSAGE_LENGTH: usize = 2000;
 
 #[derive(StructOpt)]
 struct BotOptions {
@@ -134,7 +134,13 @@ async fn main() -> Result<(), error::Error> {
                             }
                         }
                         if !message.is_empty() {
-                            tokio::spawn(discord.send_message(msg.channel_id(), &*message));
+                            let msg = discord.send_message(msg.channel_id(), &*message);
+                            tokio::spawn(async move {
+                                let res = msg.await;
+                                if let Err(e) = res {
+                                    eprintln!("Failed to send message: {}", e);
+                                }
+                            });
                         } else {
                             eprintln!("Failed to build message");
                         }
