@@ -76,7 +76,7 @@ impl Mentions {
     // Ignore any errors, better to have mappings than to try to use a broken
     // file
     fn refresh(&mut self) {
-        fs::metadata(&self.mentions_file).ok()
+        let result = fs::metadata(&self.mentions_file).ok()
             .and_then(|md| md.modified().ok())
             .and_then(|modified| {
                 if self.last_modified < modified {
@@ -84,15 +84,16 @@ impl Mentions {
                 } else {
                     None
                 }
-            })
-            .map(|val| *self = val);
+            });
+        if let Some(val) = result {
+            *self = val;
+        }
     }
     // Find the first emoji with a match in the specified emoji file
     fn first_match(&self, bytes: &[u8]) -> Option<Rc<str>> {
         self.regex_map.iter().find(|r| r.0.is_match(bytes)).map(|r| Rc::clone(&r.1))
     }
 }
-
 
 #[tokio::main]
 async fn main() -> Result<(), error::Error> {
