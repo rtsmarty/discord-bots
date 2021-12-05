@@ -70,7 +70,7 @@ impl Owned {
             unsafe {
                 let buf = &mut BufMut::bytes_mut(&mut payload)[..header.payload_len as usize];
                 reader.prepare_uninitialized_buffer(buf);
-                let real_buf = std::mem::MaybeUninit::slice_get_mut(buf);
+                let real_buf = std::mem::MaybeUninit::slice_assume_init_mut(buf);
                 let size = reader.read_exact(real_buf).await.map_err(header::Error::Io)?;
                 payload.advance_mut(size);
             };
