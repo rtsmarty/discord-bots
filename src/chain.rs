@@ -28,7 +28,7 @@ impl<T: Hash + Eq> WeightedSet<T> {
 }
 impl<T: Clone> Distribution<T> for WeightedSet<T> {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> T {
-        let selected = rng.gen_range(0, self.total_size);
+        let selected = rng.gen_range(0..=self.total_size);
         self.values.iter()
             .scan(0, |accum, (value, weight)| {
                 *accum += *weight;
@@ -58,7 +58,7 @@ impl Chain {
             // We need to special case for the bytes being smaller than the
             // window size though - i.e. we need to iterate at least once, so
             // make sure that the iterator range goes to at least 1
-            (0..cmp::max(1, bytes.len().saturating_sub(size)))
+            (0..=bytes.len().saturating_sub(size))
                 .into_iter()
                 // if the bytes are smaller than the window size, then doing
                 // bytes[idx..idx + size] will overflow the buffer, so we need
