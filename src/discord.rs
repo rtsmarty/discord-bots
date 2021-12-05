@@ -45,6 +45,7 @@ use tokio::{
     },
 };
 use std::{
+    borrow::Cow,
     cmp,
     future::Future,
     marker::Unpin,
@@ -212,6 +213,7 @@ pub struct Discord {
     prebuf: Option<Bytes>,
     wsreader: ReadHalf<TlsStream<TcpStream>>,
     wswriter: WriteHalf<TlsStream<TcpStream>>,
+    token: String,
     auth_header: http::HeaderValue,
     session_id: Bytes,
     last_seq: u64,
@@ -268,6 +270,7 @@ impl Discord {
             prebuf,
             wsreader,
             wswriter,
+            token: String::from(token),
             auth_header,
             session_id,
             last_seq,
@@ -277,8 +280,55 @@ impl Discord {
         })
     }
 
+    pub async fn reconnect(&mut self) -> Result<(), Error> {
+        let gateway_url_bytes = Self::bot_gateway_url(&self.client, self.auth_header.clone()).await?;
+        let mut urlbuf = BytesMut::from(&*gateway_url_bytes);
+        urlbuf.reserve(Self::GATEWAY_PARAMETERS.len());
+        urlbuf.extend_from_slice(Self::GATEWAY_PARAMETERS.as_bytes());
+
+        let upgrade = Self::connect_gateway(&self.client, self.auth_header.clone(), urlbuf.freeze()).await?;
+        let stream = upgrade.downcast::<TlsStream<TcpStream>>().unwrap();
+        let prebuf = if stream.read_buf.len() > 0 { Some(stream.read_buf) } else { None };
+        let mut wsstream = stream.io;
+
+        let owned_message = ws::message::Owned::read(&mut wsstream).await?;
+        let hello = match owned_message.message() {
+            ws::Message::Text(t) => serde_json::from_str::<model::WsPayload<model::Hello>>(t)?,
+            _ => panic!()
+        };
+
+        self.heartbeat_interval = interval(Duration::from_millis(hello.d.heartbeat_interval));
+
+        ws::Message::Text(&serde_json::to_string(&model::WsPayload {
+                op: 6,
+                d: model::Resume {
+                    token: Cow::Borrowed(&self.token),
+                    session_id: Cow::Borrowed(self.session_id()),
+                    seq: self.last_seq,
+                },
+                s: None,
+                t: None
+            })?)
+            .write(&mut wsstream, ws::message::Context::Client).await?;
+
+        let (wsreader, wswriter) = split(wsstream);
+
+        self.wsreader = wsreader;
+        self.wswriter = wswriter;
+        self.prebuf   = prebuf;
+
+        Ok(())
+    }
+
     pub fn user_id(&self) -> &str {
+        // safety: self.user_id always comes from a Cow<str> so will always be
+        // UTF-8
         unsafe { str::from_utf8_unchecked(&*self.user_id) }
+    }
+    pub fn session_id(&self) -> &str {
+        // safety: self.session_id always comes from a Cow<str> so will always
+        // be UTF-8
+        unsafe { str::from_utf8_unchecked(&*self.session_id) }
     }
 
     async fn get_success_response(client: &HttpsClient, req: Request<Body>) -> Result<Response<Body>, Error> {
@@ -329,67 +379,77 @@ impl Discord {
     }
 
     pub async fn next(&mut self) -> Result<Message, Error> {
-        let user_id = &*self.user_id;
+        let user_id = self.user_id.clone();
 
         // loop until we get a message that's a proper discord message that we
         // care about (i.e. not a Heartbeat Ack/Reaction/etc, actually a text
         // message sent to a channel)
         loop {
-            let message = ws::message::Owned::read(&mut self.wsreader).fuse();
-            pin_mut!(message);
+            let reconnect = {
+                let message = ws::message::Owned::read(&mut self.wsreader).fuse();
+                pin_mut!(message);
 
-            // We also need to send a heartbeat occassionally, so loop until we
-            // get something that isn't our heartbeat interval (i.e. actually
-            // a proper websocket message)
-            let msg = loop {
-                let interval = self.heartbeat_interval.tick().fuse();
-                pin_mut!(interval);
+                // We also need to send a heartbeat occassionally, so loop until we
+                // get something that isn't our heartbeat interval (i.e. actually
+                // a proper websocket message)
+                let (msg, reconnect) = loop {
+                    let interval = self.heartbeat_interval.tick().fuse();
+                    pin_mut!(interval);
 
-                // Prefer sending heartbeats over receiving messages if we can
-                futures::select_biased! {
-                    i = interval => match self.ack.take() {
-                        Some(()) => {
-                            let identify = model::WsPayload {
-                                op: 1,
-                                d: self.last_seq,
-                                s: None,
-                                t: None,
-                            };
-                            let serialized = serde_json::to_string(&identify)?;
-                            ws::Message::Text(&serialized)
-                                .write(&mut self.wswriter, ws::message::Context::Client)
-                                .await?;
+                    // Prefer sending heartbeats over receiving messages if we can
+                    futures::select_biased! {
+                        i = interval => match self.ack.take() {
+                            Some(()) => {
+                                let identify = model::WsPayload {
+                                    op: 1,
+                                    d: self.last_seq,
+                                    s: None,
+                                    t: None,
+                                };
+                                let serialized = serde_json::to_string(&identify)?;
+                                ws::Message::Text(&serialized)
+                                    .write(&mut self.wswriter, ws::message::Context::Client)
+                                    .await?;
+                            }
+                            None => return Err(Error::NoAck),
+                        },
+                        msg_res = message => break {
+                            let owned_message = msg_res?;
+
+                            match owned_message.message() {
+                                ws::Message::Text(t) => {
+                                    let next = serde_json::from_str::<model::WsPayloadUnknownOp>(t)?;
+
+                                    if let Some(s) = next.s {
+                                        self.last_seq = s;
+                                    }
+
+                                    if next.op == 11 {
+                                        self.ack = Some(());
+                                    }
+                                    if let Some("MESSAGE_CREATE") = next.t.as_deref() {
+                                        let msg = serde_json::from_str::<model::WsPayload<model::MessageReceived>>(t)?;
+                                        (Some(Message::from_message_received(owned_message.buf(), msg.d, &user_id)), false)
+                                    } else {
+                                        (None, false)
+                                    }
+                                }
+                                ws::Message::Close(Some((1001, _))) => {
+                                    (None, true)
+                                }
+                                _ => return Err(Error::UnexpectedWebsocketResponse(owned_message))
+                            }
                         }
-                        None => return Err(Error::NoAck),
-                    },
-                    msg_res = message => break {
-                        let owned_message = msg_res?;
-
-                        if let ws::Message::Text(t) = owned_message.message() {
-                            let next = serde_json::from_str::<model::WsPayloadUnknownOp>(t)?;
-
-                            if let Some(s) = next.s {
-                                self.last_seq = s;
-                            }
-
-                            if next.op == 11 {
-                                self.ack = Some(());
-                            }
-                            if let Some("MESSAGE_CREATE") = next.t.as_ref().map(|s| &**s) {
-                                let msg = serde_json::from_str::<model::WsPayload<model::MessageReceived>>(t)?;
-                                Some(Message::from_message_received(owned_message.buf(), msg.d, user_id))
-                            } else {
-                                None
-                            }
-                        } else {
-                            return Err(Error::UnexpectedWebsocketResponse(owned_message));
-                        }
-                    }
+                    };
                 };
-            };
 
-            if let Some(msg) = msg {
-                break Ok(msg);
+                if let Some(msg) = msg {
+                    break Ok(msg);
+                }
+                reconnect
+            };
+            if reconnect {
+                self.reconnect().await?;
             }
         }
     }
@@ -425,7 +485,7 @@ impl Discord {
             auth_header: self.auth_header.clone(),
             base_uri: format!("https://discordapp.com/api/v6/channels/{}/messages", channel_id),
             client: self.client.clone(),
-            limit: limit,
+            limit,
             next_msg_id: before_msg,
             next_res: None,
             rate_limiter: None,
