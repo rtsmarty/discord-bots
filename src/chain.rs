@@ -28,7 +28,7 @@ impl<T: Hash + Eq> WeightedSet<T> {
 }
 impl<T: Clone> Distribution<T> for WeightedSet<T> {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> T {
-        let selected = rng.gen_range(0..=self.total_size);
+        let selected = rng.gen_range(1..=self.total_size);
         self.values.iter()
             .scan(0, |accum, (value, weight)| {
                 *accum += *weight;
