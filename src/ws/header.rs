@@ -252,13 +252,16 @@ impl Header {
 mod tests {
     use super::*;
     use std::io::Cursor;
+    use tokio::io::ReadBuf;
 
     struct SyncRead<T> {
         inner: T
     }
     impl<T: std::io::Read + std::marker::Unpin> tokio::io::AsyncRead for SyncRead<T> {
-        fn poll_read(self: std::pin::Pin<&mut Self>, _: &mut std::task::Context, buf: &mut [u8]) -> std::task::Poll<std::io::Result<usize>> {
-            std::task::Poll::Ready(self.get_mut().inner.read(buf))
+        fn poll_read(self: std::pin::Pin<&mut Self>, _: &mut std::task::Context, buf: &mut ReadBuf<'_>) -> std::task::Poll<std::io::Result<()>> {
+            let read = self.get_mut().inner.read(buf.initialized_mut())?;
+            buf.advance(read);
+            std::task::Poll::Ready(Ok(()))
         }
     }
 
