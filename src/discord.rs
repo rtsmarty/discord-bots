@@ -398,7 +398,7 @@ impl Discord {
 
                     // Prefer sending heartbeats over receiving messages if we can
                     futures::select_biased! {
-                        i = interval => match self.ack.take() {
+                        _ = interval => match self.ack.take() {
                             Some(()) => {
                                 let identify = model::WsPayload {
                                     op: 1,
