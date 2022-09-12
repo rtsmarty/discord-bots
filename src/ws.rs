@@ -2,9 +2,9 @@ use base64::{
     encode_config_slice,
     STANDARD,
 };
-use crypto::{
-    digest::Digest,
-    sha1::Sha1,
+use ring::digest::{
+    SHA1_FOR_LEGACY_USE_ONLY,
+    digest,
 };
 use rand::{
     rngs::OsRng,
@@ -108,13 +108,10 @@ impl From<RequestKey> for ResponseKey {
         (&mut concat[..keystr.len()]).copy_from_slice(keystr.as_bytes());
         (&mut concat[keystr.len()..len]).copy_from_slice(MAGIC_GUID);
 
-        let mut sha_out = [0; 20];
-        let mut sha1 = Sha1::new();
-        sha1.input(&concat[..len]);
-        sha1.result(&mut sha_out);
+        let digest = digest(&SHA1_FOR_LEGACY_USE_ONLY, &concat[..len]);
 
         let mut key = [0; MAX_RESPONSE_KEY_LEN];
-        let size = encode_config_slice(&sha_out as &[u8], STANDARD, &mut key);
+        let size = encode_config_slice(digest.as_ref(), STANDARD, &mut key);
         ResponseKey {
             bytes: key,
             size: size as u8
