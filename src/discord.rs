@@ -38,8 +38,8 @@ use tokio::{
     },
     net::TcpStream,
     time::{
-        delay_for,
-        Delay,
+        sleep,
+        Sleep,
         interval,
         Interval,
     },
@@ -130,7 +130,7 @@ pub struct ChannelMessages {
     next_res:     Option<std::vec::IntoIter<Message>>,
     next_msg_id:  Option<String>,
     limit:        Option<usize>,
-    rate_limiter: Option<Delay>,
+    rate_limiter: Option<Sleep>,
 }
 impl ChannelMessages {
     pub async fn next(&mut self) -> Result<Option<Message>, Error> {
@@ -157,8 +157,8 @@ impl ChannelMessages {
                         None => 100
                     };
 
-                    if let Some(delay) = self.rate_limiter.take() {
-                        delay.await;
+                    if let Some(sleep) = self.rate_limiter.take() {
+                        sleep.await;
                     }
                     let uri = match self.next_msg_id.take() {
                         Some(msg_id) => format!("{}?limit={}&before={}", self.base_uri, limit, msg_id),
@@ -170,7 +170,7 @@ impl ChannelMessages {
                         .body(Body::empty())?;
 
                     let bytes = Discord::get_success_response_bytes(&self.client, req).await?;
-                    self.rate_limiter = Some(delay_for(Duration::from_secs(10)));
+                    self.rate_limiter = Some(sleep(Duration::from_secs(10)));
 
                     let response = serde_json::from_slice::<Vec<model::MessageReceived>>(&bytes)?;
                     let next_res = response.into_iter()
@@ -512,7 +512,7 @@ impl Discord {
             .body(Body::empty())?;
 
         let res = Self::verify_ws_handshake_response(&nonce, client.request(req).await?)?;
-        Ok(res.into_body().on_upgrade().await?)
+        Ok(hyper::upgrade::on(res).await?)
     }
     fn verify_ws_handshake_response(nonce: &ws::RequestKey, res: Response<Body>) -> Result<Response<Body>, Error> {
         if res.status() != http::status::StatusCode::SWITCHING_PROTOCOLS {

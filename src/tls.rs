@@ -1,10 +1,5 @@
-use bytes::{
-    Buf,
-    BufMut
-};
-use crate::{
-    error::Error,
-};
+use crate::error::Error;
+
 use hyper::{
     client::connect::{
         Connected,
@@ -16,6 +11,7 @@ use hyper::{
 use std::{
     fmt,
     future::Future,
+    io::IoSlice,
     marker::Unpin,
     pin::Pin,
     task::{
@@ -23,13 +19,12 @@ use std::{
         Poll,
     },
 };
-use tokio::{
-    io::{
-        AsyncRead,
-        AsyncWrite
-    },
+use tokio::io::{
+    AsyncRead,
+    AsyncWrite,
+    ReadBuf,
 };
-use tokio_tls::{
+use tokio_native_tls::{
     self,
     TlsConnector,
 };
@@ -44,26 +39,16 @@ use tokio_tls::{
 // just be given a regular Http stream, but our traffic is https, so had to
 // create my own TlsStream and HttpsConnector.
 #[derive(Debug)]
-pub struct TlsStream<T>(tokio_tls::TlsStream<T>);
+pub struct TlsStream<T>(tokio_native_tls::TlsStream<T>);
 impl<T: AsyncRead + AsyncWrite + Connection + Unpin> Connection for TlsStream<T> {
     fn connected(&self) -> Connected {
-        self.0.get_ref().connected()
+        self.0.get_ref().get_ref().get_ref().connected()
     }
 }
 impl<T: AsyncRead + AsyncWrite + Unpin> AsyncRead for TlsStream<T> {
     #[inline]
-    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [std::mem::MaybeUninit<u8>]) -> bool {
-        self.0.prepare_uninitialized_buffer(buf)
-    }
-
-    #[inline]
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<Result<usize, std::io::Error>> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<Result<(), std::io::Error>> {
         Pin::new(&mut self.get_mut().0).poll_read(cx, buf)
-    }
-
-    #[inline]
-    fn poll_read_buf<B: BufMut>(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut B) -> Poll<Result<usize, std::io::Error>> {
-        Pin::new(&mut self.get_mut().0).poll_read_buf(cx, buf)
     }
 }
 
@@ -74,11 +59,6 @@ impl<T: AsyncWrite + AsyncRead + Unpin> AsyncWrite for TlsStream<T> {
     }
 
     #[inline]
-    fn poll_write_buf<B: Buf>(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut B) -> Poll<Result<usize, std::io::Error>> {
-        Pin::new(&mut self.get_mut().0).poll_write_buf(cx, buf)
-    }
-
-    #[inline]
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), std::io::Error>> {
         Pin::new(&mut self.get_mut().0).poll_flush(cx)
     }
@@ -86,6 +66,11 @@ impl<T: AsyncWrite + AsyncRead + Unpin> AsyncWrite for TlsStream<T> {
     #[inline]
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), std::io::Error>> {
         Pin::new(&mut self.get_mut().0).poll_shutdown(cx)
+    }
+
+    #[inline]
+    fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context<'_>, bufs: &[IoSlice<'_>]) -> Poll<Result<usize, std::io::Error>> {
+        Pin::new(&mut self.get_mut().0).poll_write_vectored(cx, bufs)
     }
 }
 

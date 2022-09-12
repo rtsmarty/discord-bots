@@ -1,5 +1,4 @@
 use bytes::{
-    BufMut,
     Bytes,
     BytesMut,
 };
@@ -9,13 +8,11 @@ use std::{
     marker::Unpin,
     str
 };
-use tokio::{
-    io::{
-        AsyncRead,
-        AsyncReadExt,
-        AsyncWrite,
-        AsyncWriteExt,
-    },
+use tokio::io::{
+    AsyncRead,
+    AsyncReadExt,
+    AsyncWrite,
+    AsyncWriteExt,
 };
 
 use super::header::{
@@ -67,13 +64,14 @@ impl Owned {
             payload.reserve(header.payload_len as usize);
 
             let start = payload.len();
-            unsafe {
-                let buf = &mut BufMut::bytes_mut(&mut payload)[..header.payload_len as usize];
-                reader.prepare_uninitialized_buffer(buf);
-                let real_buf = std::mem::MaybeUninit::slice_assume_init_mut(buf);
-                let size = reader.read_exact(real_buf).await.map_err(header::Error::Io)?;
-                payload.advance_mut(size);
-            };
+            let mut remaining = payload.len();
+            while remaining > 0 {
+                let read = reader.read_buf(&mut payload).await.map_err(header::Error::Io)?;
+                if read == 0 {
+                    Err(header::Error::PrematureFinish)?;
+                }
+                remaining -= read;
+            }
 
             if let Some(ref key) = header.masking_key {
                 key.apply(&mut payload[start..]);

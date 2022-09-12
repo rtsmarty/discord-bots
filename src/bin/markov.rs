@@ -4,6 +4,7 @@
 use discord_bots::{discord, chain, error};
 
 use bytes::Bytes;
+use clap::Parser;
 use futures::{
     pin_mut,
     future::FutureExt,
@@ -15,20 +16,19 @@ use std::{
     },
     str,
 };
-use structopt::StructOpt;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
 const MAX_MESSAGE_LENGTH: usize = 2000;
 
-#[derive(StructOpt)]
+#[derive(Parser)]
 struct BotOptions {
-    #[structopt(short="l", long="chain-len")]
+    #[clap(short='l', long="chain-len")]
     chain_length: Option<usize>,
-    #[structopt(short="t", long="token")]
+    #[clap(short='t', long="token")]
     token: String,
-    #[structopt(short="b", long="backlog-len")]
+    #[clap(short='b', long="backlog-len")]
     backlog_len: Option<usize>,
-    #[structopt(short="g", long="whole-guild-logs")]
+    #[clap(short='g', long="whole-guild-logs")]
     whole_guild_logs: bool,
 }
 

@@ -1,6 +1,6 @@
 use discord_bots::{discord, error};
-use structopt::StructOpt;
 
+use clap::Parser;
 use regex::bytes::{
     Regex,
     RegexBuilder,
@@ -19,11 +19,11 @@ use std::{
     time::SystemTime,
 };
 
-#[derive(StructOpt)]
+#[derive(Parser)]
 struct BotOptions {
-    #[structopt(short="t", long="token")]
+    #[clap(short='t', long="token")]
     token: String,
-    #[structopt(short="m", long="mention-file")]
+    #[clap(short='m', long="mention-file")]
     mention_file: PathBuf,
 }
 

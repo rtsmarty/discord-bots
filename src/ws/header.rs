@@ -25,6 +25,8 @@ pub enum Error {
     ReservedOpcode,
     #[error("Text field is not utf8")]
     NonUtf8Text,
+    #[error("Input stream ended prematurely")]
+    PrematureFinish,
     #[error("An IO Error occured")]
     Io(#[from] io::Error),
 }
