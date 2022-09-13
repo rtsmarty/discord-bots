@@ -22,11 +22,9 @@ use hyper::{
     Request,
     Response,
 };
-use crate::{
-    tls::{
-        HttpsConnector,
-        TlsStream,
-    },
+use crate::tls::{
+    HttpsConnector,
+    TlsStream,
 };
 use tokio::{
     io::{
@@ -77,39 +75,39 @@ impl Message {
             is_me: msg.author.id.as_bytes() == uid,
             mentioned: msg.mentions.iter().any(|u| u.id.as_bytes() == uid),
 
-            message_id: model::bytes_from_cow(&bytes, msg.id),
-            channel_id: model::bytes_from_cow(&bytes, msg.channel_id),
-            guild_id: msg.guild_id.map(|c| model::bytes_from_cow(&bytes, c)),
-            author_id: model::bytes_from_cow(&bytes, msg.author.id),
-            content: model::bytes_from_cow(&bytes, msg.content),
+            message_id: model::bytes_from_cow(bytes, msg.id),
+            channel_id: model::bytes_from_cow(bytes, msg.channel_id),
+            guild_id: msg.guild_id.map(|c| model::bytes_from_cow(bytes, c)),
+            author_id: model::bytes_from_cow(bytes, msg.author.id),
+            content: model::bytes_from_cow(bytes, msg.content),
         }
     }
     pub fn channel_id(&self) -> &str {
-        unsafe { str::from_utf8_unchecked(&*self.channel_id) }
+        unsafe { str::from_utf8_unchecked(&self.channel_id) }
     }
     pub fn channel_id_buf(&self) -> &Bytes {
         &self.channel_id
     }
     pub fn guild_id(&self) -> Option<&str> {
-        unsafe { self.guild_id.as_ref().map(|b| str::from_utf8_unchecked(&b)) }
+        unsafe { self.guild_id.as_ref().map(|b| str::from_utf8_unchecked(b)) }
     }
     pub fn guild_id_buf(&self) -> Option<&Bytes> {
         self.guild_id.as_ref()
     }
     pub fn message_id(&self) -> &str {
-        unsafe { str::from_utf8_unchecked(&*self.message_id) }
+        unsafe { str::from_utf8_unchecked(&self.message_id) }
     }
     pub fn message_id_buf(&self) -> &Bytes {
         &self.message_id
     }
     pub fn message(&self) -> &str {
-        unsafe { str::from_utf8_unchecked(&*self.content) }
+        unsafe { str::from_utf8_unchecked(&self.content) }
     }
     pub fn message_buf(&self) -> &Bytes {
         &self.content
     }
     pub fn author_id(&self) -> &str {
-        unsafe { str::from_utf8_unchecked(&*self.author_id) }
+        unsafe { str::from_utf8_unchecked(&self.author_id) }
     }
     pub fn author_id_buf(&self) -> &Bytes {
         &self.author_id
@@ -242,7 +240,7 @@ impl Discord {
 
         let upgrade = Self::connect_gateway(&client, auth_header.clone(), urlbuf.freeze()).await?;
         let stream = upgrade.downcast::<TlsStream<TcpStream>>().unwrap();
-        let prebuf = if stream.read_buf.len() > 0 { Some(stream.read_buf) } else { None };
+        let prebuf = if !stream.read_buf.is_empty() { Some(stream.read_buf) } else { None };
         let mut wsstream = stream.io;
 
         let owned_message = ws::message::Owned::read(&mut wsstream).await?;
@@ -288,7 +286,7 @@ impl Discord {
 
         let upgrade = Self::connect_gateway(&self.client, self.auth_header.clone(), urlbuf.freeze()).await?;
         let stream = upgrade.downcast::<TlsStream<TcpStream>>().unwrap();
-        let prebuf = if stream.read_buf.len() > 0 { Some(stream.read_buf) } else { None };
+        let prebuf = if !stream.read_buf.is_empty() { Some(stream.read_buf) } else { None };
         let mut wsstream = stream.io;
 
         let owned_message = ws::message::Owned::read(&mut wsstream).await?;
@@ -323,12 +321,12 @@ impl Discord {
     pub fn user_id(&self) -> &str {
         // safety: self.user_id always comes from a Cow<str> so will always be
         // UTF-8
-        unsafe { str::from_utf8_unchecked(&*self.user_id) }
+        unsafe { str::from_utf8_unchecked(&self.user_id) }
     }
     pub fn session_id(&self) -> &str {
         // safety: self.session_id always comes from a Cow<str> so will always
         // be UTF-8
-        unsafe { str::from_utf8_unchecked(&*self.session_id) }
+        unsafe { str::from_utf8_unchecked(&self.session_id) }
     }
 
     async fn get_success_response(client: &HttpsClient, req: Request<Body>) -> Result<Response<Body>, Error> {
@@ -551,7 +549,7 @@ impl Discord {
         ws::Message::Text(&serde_json::to_string(&model::WsPayload {
                 op: 2,
                 d: model::Identify {
-                    token: token,
+                    token,
                     properties: model::IdentifyProperties {
                         os: "linux",
                         browser: "tokio",

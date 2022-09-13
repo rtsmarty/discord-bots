@@ -73,7 +73,7 @@ impl AsRef<str> for RequestKey {
     fn as_ref(&self) -> &str {
         // base64 encoding is utf8 safe
         unsafe {
-            str::from_utf8_unchecked(&self.bytes.get_unchecked(..self.size as usize))
+            str::from_utf8_unchecked(self.bytes.get_unchecked(..self.size as usize))
         }
     }
 }
@@ -105,8 +105,8 @@ impl From<RequestKey> for ResponseKey {
         let len = keystr.len() + MAGIC_GUID_LEN;
 
         let mut concat: [u8; MAX_CONCAT_LEN] = [0; MAX_CONCAT_LEN];
-        (&mut concat[..keystr.len()]).copy_from_slice(keystr.as_bytes());
-        (&mut concat[keystr.len()..len]).copy_from_slice(MAGIC_GUID);
+        concat[..keystr.len()].copy_from_slice(keystr.as_bytes());
+        concat[keystr.len()..len].copy_from_slice(MAGIC_GUID);
 
         let digest = digest(&SHA1_FOR_LEGACY_USE_ONLY, &concat[..len]);
 
@@ -137,7 +137,7 @@ impl AsRef<str> for ResponseKey {
     fn as_ref(&self) -> &str {
         // base64 encoding is utf8 safe
         unsafe {
-            str::from_utf8_unchecked(&self.bytes.get_unchecked(..self.size as usize))
+            str::from_utf8_unchecked(self.bytes.get_unchecked(..self.size as usize))
         }
     }
 }

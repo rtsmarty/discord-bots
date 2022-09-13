@@ -144,14 +144,14 @@ impl Header {
             extensions,
             kind,
             payload_len,
-            masking_key: if bytes.len() == 0 || !has_mask {
+            masking_key: if bytes.is_empty() || !has_mask {
                 None
             } else {
                 Some(MaskingKey { key: [0; 4] })
             }
         };
 
-        if bytes.len() == 0 {
+        if bytes.is_empty() {
             Ok(header)
         } else {
 

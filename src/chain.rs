@@ -51,7 +51,7 @@ impl Chain {
         }
     }
     pub fn feed<T: Into<Bytes>>(&mut self, feeder: T) {
-        fn byte_windows<'a>(bytes: &'a Bytes, size: usize) -> impl Iterator<Item=Bytes> + 'a {
+        fn byte_windows(bytes: &Bytes, size: usize) -> impl Iterator<Item=Bytes> + '_ {
             // The idea here is to iterate between 0 and the last window's left
             // position and then slice the bytes for the window size
             //
@@ -67,7 +67,7 @@ impl Chain {
         }
 
         fn inner(this: &mut Chain, bytes: Bytes) {
-            if bytes.len() > 0 {
+            if !bytes.is_empty() {
                 // We want an iterator like so (for the string "abcde"):
                 //
                 // (None, "abc"), ("abc", "bcd"), ("bcd", "cde"), ("cde", None)

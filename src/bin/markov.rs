@@ -58,9 +58,16 @@ async fn main() -> Result<(), error::Error> {
 
     let mut discord = discord::Discord::connect_bot(&options.token, Some(intents)).await?;
     let mut rng = rand::thread_rng();
+
+    // These all use Bytes as a key, which is a known false positive for this
+    // lint
+    #[allow(clippy::mutable_key_type)]
     let mut channel_chains = HashMap::new();
+    #[allow(clippy::mutable_key_type)]
     let mut guild_chains = HashMap::new();
+    #[allow(clippy::mutable_key_type)]
     let mut encountered_channels = HashSet::new();
+
     let (tx, mut rx) = unbounded_channel::<BacklogMessage>();
 
     loop {
@@ -129,12 +136,12 @@ async fn main() -> Result<(), error::Error> {
                         for _ in 0..10 {
                             let bytes = chain.generator(&mut rng).take(MAX_MESSAGE_LENGTH.saturating_sub(message.len())).collect::<Vec<_>>();
                             if let Ok(s) = str::from_utf8(&bytes) {
-                                message.push_str(&*s);
+                                message.push_str(s);
                                 break;
                             }
                         }
                         if !message.is_empty() {
-                            let msg = discord.send_message(msg.channel_id(), &*message);
+                            let msg = discord.send_message(msg.channel_id(), &message);
                             tokio::spawn(async move {
                                 let res = msg.await;
                                 if let Err(e) = res {

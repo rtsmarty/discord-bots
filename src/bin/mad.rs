@@ -43,7 +43,7 @@ impl Mentions {
         let mut current_emoji = None;
         // Go through all lines in the specified file which aren't comments
         // (lines starting with "# ")
-        for cfg_line in cfg_file.split('\n').filter(|s| s.trim().len() != 0 && !s.trim().starts_with("# ")) {
+        for cfg_line in cfg_file.split('\n').filter(|s| !s.trim().is_empty() && !s.trim().starts_with("# ")) {
             // lines starting with whitespace are matcher lines, containing a
             // regular expression to match against
             if cfg_line.starts_with(' ') || cfg_line.starts_with('\t') {
