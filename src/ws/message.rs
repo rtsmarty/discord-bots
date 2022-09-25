@@ -64,7 +64,7 @@ impl Owned {
             payload.reserve(header.payload_len as usize);
 
             let start = payload.len();
-            let mut remaining = payload.len();
+            let mut remaining = header.payload_len as usize;
             while remaining > 0 {
                 let read = reader.read_buf(&mut payload).await.map_err(header::Error::Io)?;
                 if read == 0 {

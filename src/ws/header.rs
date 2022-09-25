@@ -259,7 +259,7 @@ mod tests {
     }
     impl<T: std::io::Read + std::marker::Unpin> tokio::io::AsyncRead for SyncRead<T> {
         fn poll_read(self: std::pin::Pin<&mut Self>, _: &mut std::task::Context, buf: &mut ReadBuf<'_>) -> std::task::Poll<std::io::Result<()>> {
-            let read = self.get_mut().inner.read(buf.initialized_mut())?;
+            let read = self.get_mut().inner.read(buf.initialize_unfilled())?;
             buf.advance(read);
             std::task::Poll::Ready(Ok(()))
         }
