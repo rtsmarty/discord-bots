@@ -22,12 +22,12 @@ const MAX_MESSAGE_LENGTH: usize = 2000;
 
 #[derive(Parser)]
 struct BotOptions {
-    #[clap(short='l', long="chain-len")]
-    chain_length: Option<usize>,
+    #[clap(short='l', long="chain-len", default_value_t=8)]
+    chain_length: usize,
     #[clap(short='t', long="token")]
     token: String,
-    #[clap(short='b', long="backlog-len")]
-    backlog_len: Option<usize>,
+    #[clap(short='b', long="backlog-len", default_value_t=100)]
+    backlog_len: usize,
     #[clap(short='g', long="whole-guild-logs")]
     whole_guild_logs: bool,
 }
@@ -85,10 +85,10 @@ async fn main() -> Result<(), error::Error> {
                     backlog = rx.recv().fuse() => if let Some(backlog) = backlog {
                         let chain = if let (Some(guild_id_buf), true) = (backlog.guild_id, options.whole_guild_logs) {
                             guild_chains.entry(guild_id_buf)
-                                .or_insert_with(|| chain::Chain::new(options.chain_length.unwrap_or(8)))
+                                .or_insert_with(|| chain::Chain::new(options.chain_length))
                         } else {
                             channel_chains.entry(backlog.msg.channel_id_buf().clone())
-                                .or_insert_with(|| chain::Chain::new(options.chain_length.unwrap_or(8)))
+                                .or_insert_with(|| chain::Chain::new(options.chain_length))
                         };
                         if !backlog.msg.is_me() && !backlog.msg.message().is_empty() && !backlog.msg.mentioned() {
                             chain.feed(backlog.msg.message_buf().clone());
@@ -109,13 +109,13 @@ async fn main() -> Result<(), error::Error> {
                     });
 
                     guild_chains.entry(guild_id_buf.clone())
-                        .or_insert_with(|| chain::Chain::new(options.chain_length.unwrap_or(8)))
+                        .or_insert_with(|| chain::Chain::new(options.chain_length))
                 } else {
                     channel_chains.entry(msg.channel_id_buf().clone())
                         .or_insert_with(|| {
                             let old_messages = discord.channel_messages(msg.channel_id(), options.backlog_len, None);
                             tokio::spawn(get_old_messages(old_messages, None, tx.clone()));
-                            chain::Chain::new(options.chain_length.unwrap_or(8))
+                            chain::Chain::new(options.chain_length)
                         })
                 };
 

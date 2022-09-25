@@ -127,7 +127,7 @@ pub struct ChannelMessages {
     base_uri:     String,
     next_res:     Option<std::vec::IntoIter<Message>>,
     next_msg_id:  Option<String>,
-    limit:        Option<usize>,
+    remaining:    usize,
     rate_limiter: Option<Sleep>,
 }
 impl ChannelMessages {
@@ -145,15 +145,11 @@ impl ChannelMessages {
                     }
                 }
                 None => {
-                    let limit = match self.limit {
-                        Some(0) => return Ok(None),
-                        Some(ref mut n) => {
-                            let next = cmp::min(*n, 100);
-                            *n = n.saturating_sub(100);
-                            next
-                        }
-                        None => 100
-                    };
+                    if self.remaining == 0 {
+                        return Ok(None);
+                    }
+                    let limit = cmp::min(self.remaining, 100);
+                    self.remaining -= limit;
 
                     if let Some(sleep) = self.rate_limiter.take() {
                         sleep.await;
@@ -175,7 +171,7 @@ impl ChannelMessages {
                         .map(|msg| Message::from_message_received(&bytes, msg, &self.user_id))
                         .collect::<Vec<_>>();
                     if next_res.len() < limit {
-                        self.limit = Some(0);
+                        self.remaining = 0;
                     }
                     self.next_res = Some(next_res.into_iter());
                 }
@@ -478,12 +474,12 @@ impl Discord {
             Self::get_success_response(&client, req?).await.map(|_| ())
         }
     }
-    pub fn channel_messages(&self, channel_id: &str, limit: Option<usize>, before_msg: Option<String>) -> ChannelMessages {
+    pub fn channel_messages(&self, channel_id: &str, limit: usize, before_msg: Option<String>) -> ChannelMessages {
         ChannelMessages {
             auth_header: self.auth_header.clone(),
             base_uri: format!("https://discordapp.com/api/v6/channels/{}/messages", channel_id),
             client: self.client.clone(),
-            limit,
+            remaining: limit,
             next_msg_id: before_msg,
             next_res: None,
             rate_limiter: None,
