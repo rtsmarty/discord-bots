@@ -32,4 +32,4 @@ features = [ "client", "http1", "stream", "tcp" ]
 
 [dependencies.tokio]
 version  = "1.21"
-features = [ "io-utils", "macros", "net", "rt-multi-thread", "time" ]
+features = [ "io-util", "macros", "net", "rt-multi-thread", "time" ]
